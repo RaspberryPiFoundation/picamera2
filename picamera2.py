@@ -455,7 +455,7 @@ class Picamera2:
             display_request.acquire()
 
             if self._encoder is not None:
-                stream = self.stream_map["main"]
+                stream = self.stream_map[self.encode_stream_name]
                 self._encoder.encode(stream, display_request)
 
             # See if any actions have been queued up for us to do here.
@@ -729,9 +729,10 @@ class Picamera2:
             raise RuntimeError("No video stream found")
         if self.encoder is None:
             raise RuntimeError("No encoder specified")
-        self.encoder.width, self.encoder.height = streams['main']['size']
-        self.encoder.format = streams['main']['format']
-        self.encoder.stride = streams['main']['stride']
+        name = self.encode_stream_name
+        self.encoder.width, self.encoder.height = streams[name]['size']
+        self.encoder.format = streams[name]['format']
+        self.encoder.stride = streams[name]['stride']
         self.encoder._start()
 
     def stop_encoder(self):
@@ -747,6 +748,21 @@ class Picamera2:
             raise RuntimeError("Must pass encoder instance")
         self._encoder = value
 
+    def start_recording(self, encoder, output):
+        """Start recording a video using the given encoder and to the given output.
+        Output may be a string in which case the correspondingly named file is opened."""
+        if isinstance(output, str):
+            output = open(output, 'wb')
+        encoder.output = output
+        self.encoder = encoder
+        self.start_encoder()
+        self.start()
+
+    def stop_recording(self):
+        """Stop recording a video. The encode and output are stopped and closed."""
+        self.stop()
+        self.stop_encoder()
+        self.encoder.output.close()
 
 class CompletedRequest:
     def __init__(self, request, picam2):
