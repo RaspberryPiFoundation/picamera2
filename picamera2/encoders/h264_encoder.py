@@ -17,6 +17,7 @@ class H264Encoder(Encoder):
         super().__init__()
         self.bufs = {}
         self._bitrate = bitrate
+        self.vd = None
 
     def _start(self):
         super()._start()
@@ -195,7 +196,7 @@ class H264Encoder(Encoder):
         # as the header seems only to be sent with the first frame
         #if self._output is None:
         #    return
-        if self.vd.closed:
+        if self.vd is None or self.vd.closed:
             return
         cfg = stream.configuration
         fb = request.request.buffers[stream]

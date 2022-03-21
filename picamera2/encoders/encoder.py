@@ -13,6 +13,7 @@ class Encoder:
         self._output = None
         self._running = False
         self._circular = None
+        self._circularpos = 0
 
     @property
     def buffersize(self):
