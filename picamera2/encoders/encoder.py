@@ -1,6 +1,5 @@
 from v4l2 import *
 import collections
-import struct
 import io
 
 
