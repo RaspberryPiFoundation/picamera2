@@ -1,5 +1,6 @@
 from v4l2 import *
 import collections
+import struct
 import io
 
 
@@ -91,8 +92,13 @@ class Encoder:
 
     def dumpbuffer(self, filename):
         output = open(filename, "wb")
+        first = False
         for frame in list(self._circular):
-            output.write(frame)
+            naltype = frame[4] & 0x1F
+            if naltype == 0x7 or naltype == 0x8:
+                first = True
+            if first:
+                output.write(frame)
         output.close()
 
     def _start(self):
