@@ -90,10 +90,10 @@ class Encoder:
         pass
 
     def dumpbuffer(self, filename):
-        f = open(filename, "wb")
-        for frame in self._circular:
-            f.write(frame)
-        f.close()
+        output = open(filename, "wb")
+        for frame in list(self._circular):
+            output.write(frame)
+        output.close()
 
     def _start(self):
         if self._running:
