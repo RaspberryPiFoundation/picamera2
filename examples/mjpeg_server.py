@@ -4,13 +4,15 @@
 # Run this script, then point a web browser at http:<this-ip-address>:8000
 # Note: needs simplejpeg to be installed (pip3 install simplejpeg).
 
-from picamera2.picamera2 import *
-from picamera2.encoders.jpeg_encoder import *
 import io
 import logging
 import socketserver
-from threading import Condition, Thread
 from http import server
+from threading import Condition
+
+from picamera2 import Picamera2
+from picamera2.encoders import JpegEncoder
+from picamera2.outputs import FileOutput
 
 PAGE = """\
 <html>
@@ -82,10 +84,9 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
 
 
 picam2 = Picamera2()
-picam2.start_preview()
-picam2.configure(picam2.video_configuration(main={"size": (640, 480)}))
+picam2.configure(picam2.create_video_configuration(main={"size": (640, 480)}))
 output = StreamingOutput()
-picam2.start_recording(JpegEncoder(), output)
+picam2.start_recording(JpegEncoder(), FileOutput(output))
 
 try:
     address = ('', 8000)

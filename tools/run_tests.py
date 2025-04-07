@@ -4,6 +4,7 @@ import argparse
 import os
 import subprocess
 import sys
+import time
 
 # Execute this script with no arguments to run all the tests listed in the
 # tests/test-list.txt file. It prints out whether each test passes, fails,
@@ -50,17 +51,41 @@ def clean_directory():
         os.remove(os.path.join(cwd, f))
 
 
-def run_tests(tests):
+def indent(text, num_spaces=4):
+    between = "\n" + " " * num_spaces
+    return between.join(text.splitlines()) + "\n"
+
+
+def print_subprocess_output(exc: subprocess.CalledProcessError):
+    if exc.stdout is not None:
+        print("=" * 20 + "    STDOUT    " + "=" * 20)
+        print(indent(exc.stdout.decode('utf-8')))
+
+    if exc.stderr is not None:
+        print("=" * 20 + "    STDERR    " + "=" * 20)
+        print(indent(exc.stderr.decode('utf-8')))
+
+
+def run_tests(tests, xserver=True):
     """Run all the given tests. Return the number that fail."""
+    if not xserver:
+        vt = 1
+    else:
+        vt = 7
+    if os.system(f"sudo chvt {vt}") != 0:
+        print("FAILED to switch VT")
+        return len(tests)
+    time.sleep(3)
     num_failed = 0
     for test in tests:
         clean_directory()
         print("Running ", test, "... ", sep='', end='', flush=True)
         try:
-            output = subprocess.check_output(['python3', test], timeout=30, stderr=subprocess.STDOUT)
+            output = subprocess.check_output(['python3', test], timeout=90, stderr=subprocess.STDOUT)
             output = output.decode('utf-8')
             output = output.split('\n')
             test_passed = True
+            test_skipped = False
             for line in output:
                 line = line.lower()
                 if "test pattern modes" in line:  # libcamera spits out a bogus error here
@@ -69,6 +94,10 @@ def run_tests(tests):
                     pass
                 elif "xdg_runtime_dir" in line:  # this one too when running on behalf of GitHub
                     pass
+                elif "unable to set controls" in line:  # currently provoked by multi camera tests
+                    pass
+                elif "skipped" in line:  # allow tests to report that they aren't doing anything
+                    test_skipped = True
                 elif "error" in line:
                     print("\tERROR")
                     print("\t", line)
@@ -76,42 +105,60 @@ def run_tests(tests):
                     num_failed = num_failed + 1
                     break
             if test_passed:
-                print("\tPASSED")
-        except subprocess.CalledProcessError:
+                print("\tSKIPPED" if test_skipped else "\tPASSED")
+        except subprocess.CalledProcessError as e:
             print("\tFAILED")
+            print_subprocess_output(e)
             num_failed = num_failed + 1
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             print("\tTIMED OUT")
+            print_subprocess_output(e)
             num_failed = num_failed + 1
     return num_failed
 
 
+def directoryexists(arg):
+    if not os.path.isdir(arg):
+        raise argparse.ArgumentTypeError(f"The directory {arg} doesn't exist")
+    else:
+        return arg
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='picamera2 automated tests')
-    parser.add_argument('--dir', '-d', action='store', default='/home/pi/picamera2_tests',
-                        help='Folder in which to run tests')
-    parser.add_argument('--picamera2-dir', '-p', action='store', default='/home/pi/picamera2',
-                        help='Location of picamera2 folder')
-    parser.add_argument('--test-list-file', '-t', action='store', default='tests/test_list.txt',
-                        help='File containing list of tests to run')
+    parser.add_argument('--dir', '-d', action='store',
+                        default='/home/pi/picamera2_tests', help='Folder in which to run tests')
+    parser.add_argument('--picamera2-dir', '-p', action='store', type=directoryexists,
+                        default='/home/pi/picamera2', help='Location of picamera2 folder')
+    parser.add_argument('--test-list-files', '-t', action='store',
+                        default='test_list_drm.txt, test_list.txt',
+                        help='Comma-separated list of files, each containing a list of tests to run')
     args = parser.parse_args()
 
     dir = args.dir
     picamera2_dir = args.picamera2_dir
-    test_list_file = os.path.join(picamera2_dir, args.test_list_file)
+    test_dir = os.path.join(picamera2_dir, "tests")
+    test_list_files = [os.path.join(test_dir, file.strip()) for file in args.test_list_files.split(",")]
+
     print("dir:", dir)
     print("Picamera2 dir:", picamera2_dir)
-    print("Test list file:", test_list_file)
+    print("Test list files:", test_list_files)
 
-    tests = load_test_list(test_list_file, picamera2_dir)
+    all_tests = [load_test_list(file, picamera2_dir) for file in test_list_files]
 
     if not os.path.exists(dir):
         os.makedirs(dir)
     os.chdir(dir)
 
-    print("Running", len(tests), "tests")
+    print("Running", sum([len(tests) for tests in all_tests]), "tests")
     print()
-    num_failed = run_tests(tests)
+
+    num_failed = 0
+    for name, tests in zip(test_list_files, all_tests):
+        print("Running tests in", name)
+        # There is a convention here that tests with "drm" in the name will run without X
+        xserver = "drm" not in name
+        num_failed += run_tests(tests, xserver=xserver)
     print()
     if num_failed == 0:
         print("ALL TESTS PASSED!")

@@ -1,37 +1,37 @@
 #!/usr/bin/python3
 
-from picamera2.encoders.h264_encoder import *
-from picamera2.picamera2 import *
-from signal import pause
-import numpy as np
 import time
+
+import numpy as np
+
+from picamera2 import Picamera2
+from picamera2.encoders import H264Encoder
+from picamera2.outputs import FileOutput
 
 lsize = (320, 240)
 picam2 = Picamera2()
-video_config = picam2.video_configuration(main={"size": (1280, 720), "format": "RGB888"}, 
-                                          lores={"size": lsize, "format": "YUV420"})
+video_config = picam2.create_video_configuration(main={"size": (1280, 720), "format": "RGB888"},
+                                                 lores={"size": lsize, "format": "YUV420"})
 picam2.configure(video_config)
-picam2.start_preview()
 encoder = H264Encoder(1000000)
-picam2.encoder = encoder
 picam2.start()
 
 w, h = lsize
-prev = None 
+prev = None
 encoding = False
 ltime = 0
 
 while True:
     cur = picam2.capture_buffer("lores")
-    cur = cur[:w*h].reshape(h, w)
+    cur = cur[:w * h].reshape(h, w)
     if prev is not None:
         # Measure pixels differences between current and
         # previous frame
         mse = np.square(np.subtract(cur, prev)).mean()
         if mse > 7:
             if not encoding:
-                encoder.output = open("{}.h264".format(int(time.time())), 'wb')
-                picam2.start_encoder()
+                encoder.output = FileOutput(f"{int(time.time())}.h264")
+                picam2.start_encoder(encoder)
                 encoding = True
                 print("New Motion", mse)
             ltime = time.time()

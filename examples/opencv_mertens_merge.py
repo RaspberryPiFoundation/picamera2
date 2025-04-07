@@ -1,16 +1,17 @@
 #!/usr/bin/python3
 
-import cv2
 import time
 
-from picamera2.picamera2 import *
+import cv2
+import numpy as np
+
+from picamera2 import Picamera2
 
 # Simple Mertens merge with 3 exposures. No image alignment or anything fancy.
 RATIO = 3.0
 
 picam2 = Picamera2()
-picam2.start_preview()
-picam2.configure(picam2.preview_configuration())
+picam2.configure(picam2.create_preview_configuration())
 picam2.start()
 
 # Run for a second to get a reasonable "middle" exposure level.
@@ -19,20 +20,24 @@ metadata = picam2.capture_metadata()
 exposure_normal = metadata["ExposureTime"]
 gain = metadata["AnalogueGain"] * metadata["DigitalGain"]
 picam2.stop()
-
-capture_config = picam2.preview_configuration(main={"size": (1024, 768), "format": "RGB888"})
+controls = {"ExposureTime": exposure_normal, "AnalogueGain": gain}
+capture_config = picam2.create_preview_configuration(main={"size": (1024, 768),
+                                                           "format": "RGB888"},
+                                                     controls=controls)
 picam2.configure(capture_config)
-picam2.start({"ExposureTime": exposure_normal, "AnalogueGain": gain})
+picam2.start()
 normal = picam2.capture_array()
 picam2.stop()
 
 exposure_short = int(exposure_normal / RATIO)
-picam2.start({"ExposureTime": exposure_short, "AnalogueGain": gain})
+picam2.set_controls({"ExposureTime": exposure_short, "AnalogueGain": gain})
+picam2.start()
 short = picam2.capture_array()
 picam2.stop()
 
 exposure_long = int(exposure_normal * RATIO)
-picam2.start({"ExposureTime": exposure_long, "AnalogueGain": gain})
+picam2.set_controls({"ExposureTime": exposure_long, "AnalogueGain": gain})
+picam2.start()
 long = picam2.capture_array()
 picam2.stop()
 

@@ -212,7 +212,10 @@ class Commit:
                               self.commit],
                              stdout=subprocess.PIPE).stdout.decode('utf-8')
         files = ret.splitlines()
-        self._files = [CommitFile(f) for f in files[1:]]
+        if files[1]:
+            self._files = [CommitFile(f) for f in files[1:]]
+        else:
+            self._files = []
         self._title = files[0]
 
     def files(self, filter='AMR'):
@@ -343,10 +346,11 @@ class StyleChecker(metaclass=ClassRegistry):
 
 
 class StyleIssue(object):
-    def __init__(self, line_number, line, msg):
+    def __init__(self, line_number, line, msg, offset=None):
         self.line_number = line_number
         self.line = line
         self.msg = msg
+        self.offset = offset
 
 
 class IncludeChecker(StyleChecker):
@@ -410,7 +414,7 @@ class Pep8Checker(StyleChecker):
 
             if line_number in line_numbers:
                 line = self.__content[line_number - 1]
-                issues.append(StyleIssue(line_number, line, msg))
+                issues.append(StyleIssue(line_number, line, msg, position))
 
         return issues
 
@@ -445,8 +449,8 @@ class ShellChecker(StyleChecker):
             line = results[nr + 1]
             msg = results[nr + 2]
 
-            # Determined, but not yet used
-            position = msg.find('^') + 1
+            # Position - Determined, but not yet used
+            _ = msg.find('^') + 1
 
             if line_number in line_numbers:
                 issues.append(StyleIssue(line_number, line, msg))
@@ -611,6 +615,8 @@ def check_file(top_level, commit, filename):
                   (Colours.fg(Colours.Yellow), issue.line_number, issue.msg))
             if issue.line is not None:
                 print('+%s%s' % (issue.line.rstrip(), Colours.reset()))
+                if issue.offset is not None:
+                    print(" " * (issue.offset) + "^")
 
     return len(formatted_diff) + len(issues)
 
@@ -651,9 +657,7 @@ def check_style(top_level, commit):
 
 
 def extract_commits(revs):
-    """Extract a list of commits on which to operate from a revision or revision
-    range.
-    """
+    """Extract a list of commits on which to operate from a revision or revision range."""
     ret = subprocess.run(['git', 'rev-parse', revs], stdout=subprocess.PIPE,
                          stderr=subprocess.PIPE)
     if ret.returncode != 0:
@@ -730,7 +734,13 @@ def main(argv):
 
     issues = 0
     for commit in commits:
-        issues += check_style(top_level, commit)
+        if not commit._files:
+            print(f"{'*' * 80}\n{commit.commit}\n{'*' * 80}")
+            msg = "No files found - is this a merge commit?"
+            print('%s%s%s' % (Colours.fg(Colours.Yellow), msg, Colours.reset()))
+            issues += 1
+        else:
+            issues += check_style(top_level, commit)
         print('')
 
     if issues:

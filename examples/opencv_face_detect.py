@@ -2,7 +2,7 @@
 
 import cv2
 
-from picamera2.picamera2 import *
+from picamera2 import Picamera2
 
 # Grab images as numpy arrays and leave everything else to OpenCV.
 
@@ -10,8 +10,7 @@ face_detector = cv2.CascadeClassifier("/usr/share/opencv4/haarcascades/haarcasca
 cv2.startWindowThread()
 
 picam2 = Picamera2()
-picam2.start_preview()
-picam2.configure(picam2.preview_configuration(main={"format": 'XRGB8888', "size": (640, 480)}))
+picam2.configure(picam2.create_preview_configuration(main={"format": 'XRGB8888', "size": (640, 480)}))
 picam2.start()
 
 while True:
@@ -24,3 +23,4 @@ while True:
         cv2.rectangle(im, (x, y), (x + w, y + h), (0, 255, 0))
 
     cv2.imshow("Camera", im)
+    cv2.waitKey(1)

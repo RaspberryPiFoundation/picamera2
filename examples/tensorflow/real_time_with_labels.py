@@ -9,7 +9,7 @@
 # Install necessary dependences before starting,
 #
 # $ sudo apt update
-# $ sudo apt install build-essentials
+# $ sudo apt install build-essential
 # $ sudo apt install libatlas-base-dev
 # $ sudo apt install python3-pip
 # $ pip3 install tflite-runtime
@@ -21,18 +21,13 @@
 #
 # $ python3 real_time_with_labels.py --model mobilenet_v2.tflite --label coco_labels.txt
 
-import tflite_runtime.interpreter as tflite
-
-import sys
-import os
 import argparse
 
 import cv2
 import numpy as np
-from PIL import Image
-from PIL import ImageFont, ImageDraw
+import tflite_runtime.interpreter as tflite
 
-from picamera2.picamera2 import *
+from picamera2 import MappedArray, Picamera2, Preview
 
 normalSize = (640, 480)
 lowresSize = (320, 240)
@@ -51,21 +46,17 @@ def ReadLabelFile(file_path):
 
 
 def DrawRectangles(request):
-    stream = request.picam2.stream_map["main"]
-    fb = request.request.buffers[stream]
-    with fb.mmap(0) as b:
-        im = np.array(b, copy=False, dtype=np.uint8).reshape((normalSize[1], normalSize[0], 4))
-
+    with MappedArray(request, "main") as m:
         for rect in rectangles:
             print(rect)
             rect_start = (int(rect[0] * 2) - 5, int(rect[1] * 2) - 5)
             rect_end = (int(rect[2] * 2) + 5, int(rect[3] * 2) + 5)
-            cv2.rectangle(im, rect_start, rect_end, (0, 255, 0, 0))
+            cv2.rectangle(m.array, rect_start, rect_end, (0, 255, 0, 0))
             if len(rect) == 5:
                 text = rect[4]
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(im, text, (int(rect[0] * 2) + 10, int(rect[1] * 2) + 10), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
-        del im
+                cv2.putText(m.array, text, (int(rect[0] * 2) + 10, int(rect[1] * 2) + 10),
+                            font, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
 
 def InferenceTensorFlow(image, model, output, label=None):
@@ -143,19 +134,19 @@ def main():
 
     picam2 = Picamera2()
     picam2.start_preview(Preview.QTGL)
-    config = picam2.preview_configuration(main={"size": normalSize},
-                                          lores={"size": lowresSize, "format": "YUV420"})
+    config = picam2.create_preview_configuration(main={"size": normalSize},
+                                                 lores={"size": lowresSize, "format": "YUV420"})
     picam2.configure(config)
 
     stride = picam2.stream_configuration("lores")["stride"]
-    picam2.request_callback = DrawRectangles
+    picam2.post_callback = DrawRectangles
 
     picam2.start()
 
     while True:
         buffer = picam2.capture_buffer("lores")
         grey = buffer[:stride * lowresSize[1]].reshape((lowresSize[1], stride))
-        result = InferenceTensorFlow(grey, args.model, output_file, label_file)
+        _ = InferenceTensorFlow(grey, args.model, output_file, label_file)
 
 
 if __name__ == '__main__':
